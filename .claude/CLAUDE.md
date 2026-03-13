@@ -1,62 +1,76 @@
-# Exactius — Facebook Ads Automation Platform
+# Exactius — Multi-Account Meta Ads Automation Platform
 
-Automated campaign management and optimization for Facebook Ads Manager. Handles
-campaign creation, budget adjustments, performance monitoring, and reporting.
+Automated campaign creation for Meta Ads Manager from Google Drive assets.
+Manages multiple client ad accounts from a single platform.
 
 ## Purpose
 
-Programmatic Facebook Ads campaign automation using the Facebook Marketing API.
-Reduces manual campaign management overhead and enables data-driven optimization
-at scale.
+Agency-focused Meta Ads automation: Google Drive link → assets uploaded → campaigns
+created. Handles multi-account credential management, custom naming rules per client,
+and campaign audit trails.
 
 ## Tech Stack
 
-- **Runtime**: Python 3.12+
-- **SDK**: facebook-business (official Meta SDK)
-- **API**: Facebook Marketing API v19.0
-- **Storage**: TBD (Firestore, PostgreSQL, or file-based initially)
+- **Backend**: Python 3.12+, FastAPI, facebook-business SDK, Facebook Marketing API v19.0
+- **Frontend**: Next.js (App Router), TypeScript, Zustand, Tailwind CSS
+- **Cloud**: Google Secret Manager (credentials), Google Drive API (assets)
+- **Infra**: Docker (Dockerfile.backend, frontend/Dockerfile.frontend)
 
 ## Architecture
 
 ```
+frontend/          # Next.js app (dashboard, campaign wizard, history)
 src/
-  main.py              # Entry point
-  config.py            # Configuration and environment variables
-  auth.py              # Facebook API authentication
-  campaigns/           # Campaign management modules
-  reporting/           # Analytics and reporting
-  automation/          # Automation workflows and rules
+  api/             # FastAPI app — routes, models, dependencies
+  accounts/        # Multi-account management
+  assets/          # Asset validation (images, videos)
+  campaigns/       # Campaign/adset/ad/creative managers
+  drive/           # Google Drive client + URL parser
+  naming/          # Client-specific naming convention resolver
+  orchestrator/    # Campaign launcher (end-to-end orchestration)
+  reporting/       # Analytics
+  secrets/         # Google Secret Manager integration
+  utils/           # retry.py — exponential backoff decorator
+  main.py          # CLI entry point
+  config.py        # Config + env vars
+  auth.py          # Meta API authentication
 ```
 
 ## Key Patterns
 
-- **Authentication**: Uses long-lived access tokens stored in environment or secrets
-- **Rate limiting**: Facebook API has rate limits - implement backoff/retry logic
-- **Error handling**: Facebook API errors are verbose - log and handle gracefully
-- **Async operations**: Many Facebook API operations are async - poll for completion
+- **Auth**: Long-lived Meta tokens stored in Google Secret Manager (not .env in prod)
+- **Rate limiting**: `@with_retry` decorator in `src/utils/retry.py` handles Meta API codes 4, 17, 32, 341, 613
+- **Async uploads**: `ThreadPoolExecutor` (4 workers) for parallel asset uploads
+- **Naming**: Per-client naming rules in `src/naming/` with custom overrides
 
 ## Commands
 
 ```bash
-# Development
-python -m venv venv
-source venv/bin/activate  # or venv\Scripts\activate on Windows
+# Backend
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+uvicorn src.api.main:app --reload   # API server at localhost:8000
 
-# Run automation
-python src/main.py
+# Frontend
+cd frontend && npm install && npm run dev   # Dev server at localhost:3000
 
 # Testing
-pytest tests/
+pytest tests/                              # 79 tests, all passing
+python src/main.py --help                  # CLI interface
+
+# Containers
+docker build -f Dockerfile.backend -t exactius-api .
+docker build -f frontend/Dockerfile.frontend -t exactius-frontend ./frontend
 ```
 
 ## Environment Variables
 
-Required:
-- `FB_ACCESS_TOKEN` - Facebook Marketing API access token
-- `FB_APP_ID` - Facebook App ID
-- `FB_APP_SECRET` - Facebook App Secret
-- `FB_AD_ACCOUNT_ID` - Target ad account ID (format: act_123456789)
+Required (local dev only — prod uses Secret Manager):
+- `FB_ACCESS_TOKEN` - Meta Marketing API access token
+- `FB_APP_ID` / `FB_APP_SECRET` - Meta App credentials
+- `FB_AD_ACCOUNT_ID` - Target ad account (format: act_123456789)
+- `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account JSON
+- `NEXT_PUBLIC_API_KEY` - API key for frontend → backend auth
 
 Optional:
 - `FB_API_VERSION` - API version (defaults to v19.0)
@@ -64,21 +78,15 @@ Optional:
 
 ## Getting Started
 
-1. Create a Facebook App at https://developers.facebook.com
-2. Get Marketing API access (requires business verification)
-3. Generate access token with ads_management permissions
-4. Set environment variables in `.env` file
-5. Run `python src/main.py --help` for available commands
-
-See `docs/facebook-api-setup.md` for detailed setup instructions.
+See `docs/facebook-api-setup.md` for Meta API setup and `docs/google-secret-manager-setup.md`
+for Secret Manager configuration. Run `gcloud auth application-default login` before
+starting (required for Secret Manager access in local dev).
 
 ## Guardrails
 
 - IMPORTANT: Verify before creating/launching campaigns (real money at stake)
 - IMPORTANT: Never modify live campaigns without explicit approval
-- Always test with small budgets first
-- Confirm targeting and creative before launch
-- Monitor spend limits to prevent budget overruns
+- Always test with small budgets first; confirm targeting and creative before launch
 
 ## Session Memory
 
@@ -90,5 +98,6 @@ Read active.md at session start to surface due/overdue tasks.
 - `docs/active.md` — task tracker (read every session)
 - `docs/decisions.md` — append-only decision log
 - `docs/projects.md` — project registry if managing multiple ad accounts
-- `docs/facebook-api-setup.md` — API setup and authentication guide
+- `docs/facebook-api-setup.md` — Meta API setup and authentication guide
+- `docs/google-secret-manager-setup.md` — Secret Manager setup guide
 - `docs/automation-rules.md` — automation workflow documentation
