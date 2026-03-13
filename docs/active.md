@@ -30,6 +30,17 @@ _(No scheduled checks yet)_
 
 ## Completed (Recent)
 
+- ~~[2026-03-13] Unit tests~~ — 79 tests, all passing. Covers DriveURLParser (22),
+  AssetValidator (21), NamingResolver (18), with_retry (18). No external deps — all
+  mocked. Run with `python -m pytest tests/ -v`.
+
+- ~~[2026-03-13] Error boundary~~ — `ErrorBoundary.tsx` React class component wrapping
+  all dashboard pages via `(dashboard)/layout.tsx`. Shows error card + reset button.
+
+- ~~[2026-03-13] Dockerfiles~~ — `Dockerfile.backend` (python:3.12-slim + uvicorn),
+  `frontend/Dockerfile.frontend` (3-stage node:20-alpine, standalone output).
+  `next.config.mjs` updated with `output: 'standalone'`. Both `.dockerignore` files added.
+
 - ~~[2026-03-13] Backend fixes~~ — Added `@with_retry` decorator with exponential backoff
   for Facebook API rate limits (codes 4, 17, 32, 341, 613) and transient errors. Applied to
   all Meta API calls. Added `X-API-Key` authentication to FastAPI (global dependency, dev-safe).

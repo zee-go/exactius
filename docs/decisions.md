@@ -4,6 +4,23 @@
 > future sessions don't re-litigate settled questions.
 > Append new entries at the top.
 
+## 2026-03-13 — Testing: Mock-based Unit Tests (no integration tests yet)
+
+- **Decided**: Unit tests only for now, all external dependencies mocked. No integration
+  tests against real Meta API or Google Cloud.
+- **Why**: Integration tests require live credentials (gcloud auth, Meta tokens) which
+  aren't set up yet. Mock-based tests validate all pure logic paths — URL parsing, asset
+  validation, naming templates, retry backoff — without external dependencies. Integration
+  tests can be added once credentials are in place.
+
+## 2026-03-13 — Docker: Separate Dockerfiles per service (not docker-compose yet)
+
+- **Decided**: `Dockerfile.backend` at project root, `frontend/Dockerfile.frontend` in
+  frontend dir. No docker-compose file yet.
+- **Why**: Each service deploys independently to Cloud Run. docker-compose is useful for
+  local dev orchestration but not required for the deployment target. Can add
+  `docker-compose.yml` later when local full-stack dev becomes a priority.
+
 ## 2026-03-13 — API Authentication: Optional API Key (X-API-Key Header)
 
 - **Decided**: Use a simple `X-API-Key` header enforced globally via FastAPI dependency.
