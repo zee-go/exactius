@@ -15,6 +15,8 @@ from facebook_business.adobjects.advideo import AdVideo
 from facebook_business.adobjects.adcreative import AdCreative
 from facebook_business.api import FacebookAdsApi
 
+from src.utils.retry import with_retry
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,6 +37,7 @@ class CreativeManager:
 
         logger.info(f"Initialized CreativeManager for {ad_account_id}")
 
+    @with_retry()
     def upload_image(self, image_path: Path) -> str:
         """
         Upload image to Meta Ad Library.
@@ -138,6 +141,7 @@ class CreativeManager:
             logger.error(f"Failed to upload video {video_path.name}: {str(e)}")
             raise ValueError(f"Video upload failed: {str(e)}")
 
+    @with_retry()
     def create_image_creative(
         self,
         image_hash: str,
@@ -201,6 +205,7 @@ class CreativeManager:
             logger.error(f"Failed to create image creative: {str(e)}")
             raise ValueError(f"Creative creation failed: {str(e)}")
 
+    @with_retry()
     def create_video_creative(
         self,
         video_id: str,

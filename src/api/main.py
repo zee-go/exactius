@@ -7,12 +7,13 @@ Main application for Exactius multi-account Meta ads automation platform.
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
 from src.api.routes import accounts, campaigns
+from src.api.dependencies import require_api_key
 
 # Configure logging
 logging.basicConfig(
@@ -45,7 +46,8 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    dependencies=[Depends(require_api_key)],
 )
 
 # Configure CORS

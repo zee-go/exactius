@@ -13,6 +13,7 @@ All campaigns start PAUSED for manual review.
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
@@ -303,61 +304,73 @@ class CampaignLauncher:
 
         return valid_assets, all_warnings
 
+    def _upload_single_asset(
+        self,
+        asset: DriveAsset,
+        page_id: str
+    ) -> Dict[str, Any] | None:
+        """Upload a single asset to Meta Ad Library. Returns metadata dict or None on failure."""
+        try:
+            if self.drive_client.is_image(asset.mime_type):
+                image_hash = self.creative_manager.upload_image(asset.local_path)
+                creative_id = self.creative_manager.create_image_creative(
+                    image_hash=image_hash,
+                    creative_name=f"Creative_{asset.name}",
+                    page_id=page_id
+                )
+                return {
+                    'asset': asset,
+                    'creative_id': creative_id,
+                    'type': 'image',
+                    'hash': image_hash,
+                }
+
+            elif self.drive_client.is_video(asset.mime_type):
+                video_id = self.creative_manager.upload_video(asset.local_path)
+                creative_id = self.creative_manager.create_video_creative(
+                    video_id=video_id,
+                    creative_name=f"Creative_{asset.name}",
+                    page_id=page_id
+                )
+                return {
+                    'asset': asset,
+                    'creative_id': creative_id,
+                    'type': 'video',
+                    'video_id': video_id,
+                }
+
+        except Exception as e:
+            logger.error(f"Failed to upload {asset.name}: {str(e)}")
+
+        return None
+
     def _upload_assets(
         self,
         assets: List[DriveAsset],
-        result: LaunchResult
+        result: LaunchResult,
+        max_workers: int = 4,
     ) -> List[Dict[str, Any]]:
-        """Upload assets to Meta Ad Library."""
-        uploaded = []
+        """Upload assets to Meta Ad Library in parallel."""
         page_id = self.account_config.get('meta', {}).get('page_id')
 
         if not page_id:
             raise ValueError("Page ID not configured in account settings")
 
-        for asset in assets:
-            try:
-                if self.drive_client.is_image(asset.mime_type):
-                    # Upload image
-                    image_hash = self.creative_manager.upload_image(asset.local_path)
+        uploaded = []
 
-                    # Create creative
-                    creative_id = self.creative_manager.create_image_creative(
-                        image_hash=image_hash,
-                        creative_name=f"Creative_{asset.name}",
-                        page_id=page_id
-                    )
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(self._upload_single_asset, asset, page_id): asset
+                for asset in assets
+            }
 
-                    result.creative_ids.append(creative_id)
-                    uploaded.append({
-                        'asset': asset,
-                        'creative_id': creative_id,
-                        'type': 'image',
-                        'hash': image_hash
-                    })
-
-                elif self.drive_client.is_video(asset.mime_type):
-                    # Upload video
-                    video_id = self.creative_manager.upload_video(asset.local_path)
-
-                    # Create creative
-                    creative_id = self.creative_manager.create_video_creative(
-                        video_id=video_id,
-                        creative_name=f"Creative_{asset.name}",
-                        page_id=page_id
-                    )
-
-                    result.creative_ids.append(creative_id)
-                    uploaded.append({
-                        'asset': asset,
-                        'creative_id': creative_id,
-                        'type': 'video',
-                        'video_id': video_id
-                    })
-
-            except Exception as e:
-                logger.error(f"Failed to upload {asset.name}: {str(e)}")
-                continue
+            for future in as_completed(futures):
+                asset = futures[future]
+                asset_result = future.result()
+                if asset_result is not None:
+                    result.creative_ids.append(asset_result['creative_id'])
+                    uploaded.append(asset_result)
+                    logger.info(f"Uploaded {asset.name} → creative {asset_result['creative_id']}")
 
         return uploaded
 

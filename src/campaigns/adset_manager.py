@@ -12,6 +12,8 @@ from facebook_business.adobjects.adset import AdSet
 from facebook_business.adobjects.campaign import Campaign
 from facebook_business.adobjects.targeting import Targeting
 
+from src.utils.retry import with_retry
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,6 +34,7 @@ class AdSetManager:
 
         logger.info(f"Initialized AdSetManager for {ad_account_id}")
 
+    @with_retry()
     def create_adset(
         self,
         campaign_id: str,
@@ -121,6 +124,7 @@ class AdSetManager:
             logger.error(f"Failed to create ad set '{adset_name}': {str(e)}")
             raise ValueError(f"AdSet creation failed: {str(e)}")
 
+    @with_retry()
     def update_adset(
         self,
         adset_id: str,

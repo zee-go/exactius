@@ -11,6 +11,8 @@ from facebook_business.adobjects.adaccount import AdAccount
 from facebook_business.adobjects.ad import Ad
 from facebook_business.adobjects.adset import AdSet
 
+from src.utils.retry import with_retry
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,6 +33,7 @@ class AdManager:
 
         logger.info(f"Initialized AdManager for {ad_account_id}")
 
+    @with_retry()
     def create_ad(
         self,
         adset_id: str,
@@ -78,6 +81,7 @@ class AdManager:
             logger.error(f"Failed to create ad '{ad_name}': {str(e)}")
             raise ValueError(f"Ad creation failed: {str(e)}")
 
+    @with_retry()
     def update_ad(
         self,
         ad_id: str,

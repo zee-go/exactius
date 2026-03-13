@@ -9,6 +9,8 @@ from typing import Dict, List, Optional
 from facebook_business.adobjects.adaccount import AdAccount
 from facebook_business.adobjects.campaign import Campaign
 
+from src.utils.retry import with_retry
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,6 +26,7 @@ class CampaignManager:
         """
         self.ad_account = ad_account
 
+    @with_retry()
     def get_campaigns(
         self,
         fields: Optional[List[str]] = None,
@@ -57,6 +60,7 @@ class CampaignManager:
 
         return list(campaigns)
 
+    @with_retry()
     def create_campaign(
         self,
         name: str,
@@ -90,6 +94,7 @@ class CampaignManager:
 
         return campaign
 
+    @with_retry()
     def update_campaign(
         self,
         campaign_id: str,
