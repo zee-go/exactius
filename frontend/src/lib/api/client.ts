@@ -9,10 +9,13 @@ class ApiClient {
   private client: AxiosInstance;
 
   constructor() {
+    const apiKey = process.env.NEXT_PUBLIC_API_KEY;
+
     this.client = axios.create({
       baseURL: BASE_URL,
       headers: {
         "Content-Type": "application/json",
+        ...(apiKey ? { "X-API-Key": apiKey } : {}),
       },
       timeout: 60000, // 60 seconds
     });
@@ -20,7 +23,6 @@ class ApiClient {
     // Request interceptor
     this.client.interceptors.request.use(
       (config) => {
-        // Future: Add authentication token here
         return config;
       },
       (error) => Promise.reject(error)
