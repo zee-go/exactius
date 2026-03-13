@@ -4,6 +4,39 @@
 > future sessions don't re-litigate settled questions.
 > Append new entries at the top.
 
+## 2026-03-13 — API Authentication: Optional API Key (X-API-Key Header)
+
+- **Decided**: Use a simple `X-API-Key` header enforced globally via FastAPI dependency.
+  Skip auth entirely when `API_KEY` env var is not set (dev mode).
+- **Why**: Low overhead for an internal tool. No user login needed — single shared key
+  is sufficient. Dev-safe default (no key = no block) avoids friction during local testing.
+  Can upgrade to JWT or OAuth later if the platform becomes multi-user.
+
+## 2026-03-13 — Retry Strategy: Decorator with Exponential Backoff
+
+- **Decided**: `@with_retry()` decorator in `src/utils/retry.py`, applied per-method on
+  manager classes. Retries on FB rate limit codes (4, 17, 32, 341, 613) and transient
+  errors (1, 2). Default: 4 retries, 2s base, 60s cap.
+- **Why**: Decorator approach keeps each manager method self-contained and testable.
+  Exponential backoff respects Facebook's rate limit windows. Non-retriable errors
+  (validation, auth) surface immediately — no wasted retries.
+
+## 2026-03-13 — Asset Upload: Parallel with ThreadPoolExecutor
+
+- **Decided**: Replace sequential asset upload loop with `ThreadPoolExecutor(max_workers=4)`.
+- **Why**: Each asset upload is I/O-bound (HTTP to Meta). Sequential was the bottleneck —
+  10 images took ~30s. 4 concurrent workers brings this to ~8-10s. Cap at 4 to stay within
+  Meta's per-token rate limits. Failures on individual assets remain isolated.
+
+## 2026-03-13 — Frontend Wizard State: Zustand (not URL params or React state)
+
+- **Decided**: Zustand store for wizard step state. History persisted via Zustand `persist`
+  middleware to `localStorage`.
+- **Why**: Wizard spans 5 steps with shared state that needs to survive step navigation.
+  URL params would expose Drive URLs and context in the browser bar. React context would
+  require provider wrapping. Zustand is already a project dependency and gives clean
+  reset/persist APIs without boilerplate.
+
 ## 2026-02-10 — Initial Architecture: Python + Facebook Business SDK
 
 - **Decided**: Use Python with the official facebook-business SDK for campaign

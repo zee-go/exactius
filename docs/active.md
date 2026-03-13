@@ -30,6 +30,19 @@ _(No scheduled checks yet)_
 
 ## Completed (Recent)
 
+- ~~[2026-03-13] Backend fixes~~ — Added `@with_retry` decorator with exponential backoff
+  for Facebook API rate limits (codes 4, 17, 32, 341, 613) and transient errors. Applied to
+  all Meta API calls. Added `X-API-Key` authentication to FastAPI (global dependency, dev-safe).
+  Parallelized asset uploads with `ThreadPoolExecutor` (4 workers).
+
+- ~~[2026-03-13] Frontend campaign wizard~~ — Built 5-step wizard at `/campaigns/create`:
+  Account → Campaign Type → Drive URL → Details → Preview & Launch. Zustand store for
+  wizard state. Auto-runs dry-run preview before launch. Success screen with campaign IDs.
+
+- ~~[2026-03-13] Campaign history page~~ — Built `/campaigns/history` with localStorage
+  persistence (Zustand persist). Table with status, names, IDs, ad counts, timestamps.
+  `NEXT_PUBLIC_API_KEY` wired into Axios client to match backend auth.
+
 - ~~[2026-02-10] Project evolution to multi-account platform~~ — Upgraded from single-account
   to multi-account Meta Ads automation platform. Added FastAPI backend, Google Secret Manager
   integration, multi-account management, comprehensive API with endpoints for account operations.
