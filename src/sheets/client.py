@@ -88,11 +88,15 @@ class SheetsClient:
             logger.info("Refreshing expired OAuth token")
             credentials.refresh(Request())
         elif not credentials or not credentials.valid:
-            logger.info("Starting OAuth flow — opening browser for authorization")
+            logger.info("Starting OAuth flow")
             flow = InstalledAppFlow.from_client_secrets_file(
                 str(client_secrets), cls.SCOPES
             )
-            credentials = flow.run_local_server(port=0)
+            try:
+                credentials = flow.run_local_server(port=0)
+            except Exception:
+                # Fallback for environments without a browser (remote/SSH)
+                credentials = flow.run_console()
 
         # Save token for next time
         token_file.parent.mkdir(parents=True, exist_ok=True)
