@@ -70,7 +70,7 @@ class Config:
         self.log_level = os.getenv('LOG_LEVEL', 'INFO')
 
         # Google Sheets settings
-        self.spreadsheet_id = os.getenv('SPREADSHEET_ID')
+        self.spreadsheet_id = os.getenv('SPREADSHEET_ID', '1zZz1azGTfrWtuInoB39jiJBy9PDNGr7Ogr5GMCfsVmA')
         self.sheet_name = os.getenv('SHEET_NAME', 'Sheet1')
 
         # Asset processing settings
