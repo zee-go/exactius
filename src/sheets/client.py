@@ -96,7 +96,13 @@ class SheetsClient:
                 credentials = flow.run_local_server(port=0)
             except Exception:
                 # Fallback for environments without a browser (remote/SSH)
-                credentials = flow.run_console()
+                # Manually run the OAuth consent flow
+                flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
+                auth_url, _ = flow.authorization_url(prompt='consent')
+                print(f"\nVisit this URL to authorize:\n\n{auth_url}\n")
+                code = input("Enter the authorization code: ").strip()
+                flow.fetch_token(code=code)
+                credentials = flow.credentials
 
         # Save token for next time
         token_file.parent.mkdir(parents=True, exist_ok=True)
