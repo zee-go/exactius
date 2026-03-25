@@ -1,54 +1,124 @@
 """
 Google Sheets API client for reading and writing spreadsheet data.
 
-Authenticates using service account credentials from Secret Manager
-and provides methods for appending rows and reading sheet data.
+Supports two authentication modes:
+1. OAuth (local dev) — user logs in via browser once, token saved locally
+2. Service account (production) — uses service account JSON from Secret Manager
 """
 
 import json
 import logging
+from pathlib import Path
 from typing import List, Optional
 
 from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 logger = logging.getLogger(__name__)
 
+# Default paths for OAuth token storage
+DEFAULT_TOKEN_PATH = Path.home() / '.exactius' / 'sheets_token.json'
+DEFAULT_CLIENT_SECRETS_PATH = Path.home() / '.exactius' / 'client_secret.json'
+
 
 class SheetsClient:
-    """Google Sheets API client with service account authentication."""
+    """Google Sheets API client with OAuth or service account authentication."""
 
     SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
-    def __init__(self, service_account_json: str):
+    def __init__(self, credentials):
         """
-        Initialize Sheets client with service account.
+        Initialize Sheets client with pre-built credentials.
+
+        Use the class methods from_oauth() or from_service_account() instead.
+
+        Args:
+            credentials: Google auth credentials object
+        """
+        self.credentials = credentials
+        self.service = build('sheets', 'v4', credentials=self.credentials)
+        logger.info("Initialized Sheets client")
+
+    @classmethod
+    def from_oauth(
+        cls,
+        client_secrets_path: Optional[str] = None,
+        token_path: Optional[str] = None,
+    ) -> 'SheetsClient':
+        """
+        Create a SheetsClient using OAuth (browser login).
+
+        On first run, opens a browser for the user to authorize.
+        Saves the token locally for future runs.
+
+        Args:
+            client_secrets_path: Path to OAuth client secrets JSON
+            token_path: Path to save/load the OAuth token
+
+        Returns:
+            Authenticated SheetsClient
+        """
+        client_secrets = Path(client_secrets_path or DEFAULT_CLIENT_SECRETS_PATH)
+        token_file = Path(token_path or DEFAULT_TOKEN_PATH)
+
+        if not client_secrets.exists():
+            raise ValueError(
+                f"OAuth client secrets not found at {client_secrets}. "
+                f"Download it from Google Cloud Console > APIs & Services > Credentials "
+                f"and save it to {DEFAULT_CLIENT_SECRETS_PATH}"
+            )
+
+        credentials = None
+
+        # Try to load existing token
+        if token_file.exists():
+            try:
+                credentials = Credentials.from_authorized_user_file(
+                    str(token_file), cls.SCOPES
+                )
+            except Exception as e:
+                logger.warning(f"Could not load saved token: {str(e)}")
+
+        # Refresh or get new credentials
+        if credentials and credentials.expired and credentials.refresh_token:
+            logger.info("Refreshing expired OAuth token")
+            credentials.refresh(Request())
+        elif not credentials or not credentials.valid:
+            logger.info("Starting OAuth flow — opening browser for authorization")
+            flow = InstalledAppFlow.from_client_secrets_file(
+                str(client_secrets), cls.SCOPES
+            )
+            credentials = flow.run_local_server(port=0)
+
+        # Save token for next time
+        token_file.parent.mkdir(parents=True, exist_ok=True)
+        token_file.write_text(credentials.to_json())
+        logger.info(f"OAuth token saved to {token_file}")
+
+        return cls(credentials)
+
+    @classmethod
+    def from_service_account(cls, service_account_json: str) -> 'SheetsClient':
+        """
+        Create a SheetsClient using a service account.
 
         Args:
             service_account_json: Service account credentials JSON string
-        """
-        self.credentials = self._load_credentials(service_account_json)
-        self.service = build('sheets', 'v4', credentials=self.credentials)
-        logger.info("Initialized Sheets client with service account")
-
-    def _load_credentials(self, credentials_json: str) -> service_account.Credentials:
-        """
-        Load service account credentials from JSON string.
-
-        Args:
-            credentials_json: Service account JSON as string
 
         Returns:
-            Service account credentials with Sheets scope
+            Authenticated SheetsClient
         """
         try:
-            credentials_dict = json.loads(credentials_json)
+            credentials_dict = json.loads(service_account_json)
             credentials = service_account.Credentials.from_service_account_info(
                 credentials_dict,
-                scopes=self.SCOPES
+                scopes=cls.SCOPES
             )
-            return credentials
+            return cls(credentials)
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid service account JSON: {str(e)}")
         except Exception as e:
@@ -93,7 +163,7 @@ class SheetsClient:
             elif e.resp.status == 403:
                 raise ValueError(
                     f"Access denied to spreadsheet: {spreadsheet_id}. "
-                    f"Make sure the sheet is shared with the service account."
+                    f"Make sure the sheet is shared with your account."
                 )
             else:
                 raise ValueError(f"Sheets API error: {str(e)}")
@@ -149,7 +219,7 @@ class SheetsClient:
             elif e.resp.status == 403:
                 raise ValueError(
                     f"Access denied to spreadsheet: {spreadsheet_id}. "
-                    f"Make sure the sheet is shared with the service account as Editor."
+                    f"Make sure you have Editor access to the sheet."
                 )
             else:
                 raise ValueError(f"Sheets API error: {str(e)}")

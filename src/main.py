@@ -53,34 +53,38 @@ def update_ad_sheet(config: Config, spreadsheet_id: str, sheet_name: str, days: 
         auth = FacebookAuth(config)
         auth.get_api_instance()
 
-        # Get service account JSON for Sheets API
+        # Build Sheets client — try service account first, fall back to OAuth
+        from src.sheets.client import SheetsClient
+        import os
+
+        sheets_client = None
+
+        # 1. Service account (production / Secret Manager mode)
         if config.is_multi_account_mode():
             from src.secrets.manager import SecretManagerClient
             secrets = SecretManagerClient(config.google_cloud_project)
             shared = secrets.get_shared_credentials()
-            service_account_json = shared['drive_service_account']
+            sheets_client = SheetsClient.from_service_account(shared['drive_service_account'])
         else:
-            import os
+            # 2. Service account from env var (if available)
             sa_path = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON')
+            sa_json = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON_CONTENT')
             if sa_path and Path(sa_path).exists():
-                service_account_json = Path(sa_path).read_text()
+                sheets_client = SheetsClient.from_service_account(Path(sa_path).read_text())
+            elif sa_json:
+                sheets_client = SheetsClient.from_service_account(sa_json)
             else:
-                sa_json = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON_CONTENT')
-                if not sa_json:
-                    logger.error(
-                        "No Google service account configured. Set either:\n"
-                        "  GOOGLE_SERVICE_ACCOUNT_JSON (path to JSON file)\n"
-                        "  GOOGLE_SERVICE_ACCOUNT_JSON_CONTENT (JSON string)"
-                    )
-                    return False
-                service_account_json = sa_json
+                # 3. OAuth (local dev — opens browser on first run)
+                client_secrets = config.oauth_client_secrets_path
+                logger.info("Using OAuth for Google Sheets authentication")
+                sheets_client = SheetsClient.from_oauth(client_secrets_path=client_secrets)
 
         # Run the updater
         from src.automation.ad_sheet_updater import AdSheetUpdater
         updater = AdSheetUpdater(
             ad_account_id=config.ad_account_id,
             access_token=config.access_token,
-            service_account_json=service_account_json,
+            sheets_client=sheets_client,
             spreadsheet_id=spreadsheet_id,
             sheet_name=sheet_name,
         )

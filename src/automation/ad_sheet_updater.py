@@ -65,7 +65,7 @@ class AdSheetUpdater:
         self,
         ad_account_id: str,
         access_token: str,
-        service_account_json: str,
+        sheets_client: SheetsClient,
         spreadsheet_id: str,
         sheet_name: str = 'Sheet1',
     ):
@@ -75,7 +75,7 @@ class AdSheetUpdater:
         Args:
             ad_account_id: Meta ad account ID (format: act_123456789)
             access_token: Meta access token
-            service_account_json: Google service account JSON for Sheets API
+            sheets_client: Authenticated SheetsClient instance
             spreadsheet_id: Target Google Sheets spreadsheet ID
             sheet_name: Sheet tab name (default: Sheet1)
         """
@@ -83,7 +83,7 @@ class AdSheetUpdater:
         self.sheet_name = sheet_name
 
         self.fetcher = AdPreviewFetcher(ad_account_id, access_token)
-        self.sheets = SheetsClient(service_account_json)
+        self.sheets = sheets_client
 
         logger.info(
             f"Initialized AdSheetUpdater for {ad_account_id} "
