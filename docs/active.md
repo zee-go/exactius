@@ -22,7 +22,10 @@
 
 ## Pending Review
 
-_(Nothing pending review yet)_
+- **[2026-04-01] Ad Sheet Updater** — Implemented automated weekly Google Sheets sync
+  for ad preview links. Needs end-to-end testing with real Meta API credentials and a
+  shared Google Sheet. Verify: `python src/main.py --update-sheet --spreadsheet-id <ID>`.
+  Requires: Google service account shared with the target sheet, Meta API credentials.
 
 ## Scheduled Checks
 
