@@ -44,6 +44,71 @@ def test_connection(config: Config) -> bool:
         return False
 
 
+def update_ad_sheet(config: Config, spreadsheet_id: str, sheet_name: str, days: int) -> bool:
+    """Fetch new ads and update Google Sheet with preview links."""
+    logger.info("Starting ad sheet update...")
+
+    try:
+        # Initialize Facebook API
+        auth = FacebookAuth(config)
+        auth.get_api_instance()
+
+        # Build Sheets client — try service account first, fall back to OAuth
+        from src.sheets.client import SheetsClient
+        import os
+
+        sheets_client = None
+
+        # 1. Service account (production / Secret Manager mode)
+        if config.is_multi_account_mode():
+            from src.secrets.manager import SecretManagerClient
+            secrets = SecretManagerClient(config.google_cloud_project)
+            shared = secrets.get_shared_credentials()
+            sheets_client = SheetsClient.from_service_account(shared['drive_service_account'])
+        else:
+            # 2. Service account from env var (if available)
+            sa_path = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON')
+            sa_json = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON_CONTENT')
+            if sa_path and Path(sa_path).exists():
+                sheets_client = SheetsClient.from_service_account(Path(sa_path).read_text())
+            elif sa_json:
+                sheets_client = SheetsClient.from_service_account(sa_json)
+            else:
+                # 3. OAuth (local dev — opens browser on first run)
+                client_secrets = config.oauth_client_secrets_path
+                logger.info("Using OAuth for Google Sheets authentication")
+                sheets_client = SheetsClient.from_oauth(client_secrets_path=client_secrets)
+
+        # Run the updater
+        from src.automation.ad_sheet_updater import AdSheetUpdater
+        updater = AdSheetUpdater(
+            ad_account_id=config.ad_account_id,
+            access_token=config.access_token,
+            sheets_client=sheets_client,
+            spreadsheet_id=spreadsheet_id,
+            sheet_name=sheet_name,
+        )
+
+        result = updater.run(days=days)
+
+        if result.success:
+            logger.info(f"✓ Ad sheet update complete")
+            logger.info(f"  Ads processed: {result.ads_processed}")
+            logger.info(f"  Rows added: {result.rows_added}")
+            if result.ads_skipped_duplicate > 0:
+                logger.info(f"  Duplicates skipped: {result.ads_skipped_duplicate}")
+            if result.ads_failed_preview > 0:
+                logger.warning(f"  Preview failures: {result.ads_failed_preview}")
+        else:
+            logger.error(f"✗ Ad sheet update failed: {', '.join(result.errors)}")
+
+        return result.success
+
+    except Exception as e:
+        logger.error(f"✗ Ad sheet update failed: {str(e)}")
+        return False
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -55,6 +120,32 @@ def main():
         '--test-connection',
         action='store_true',
         help='Test Facebook API connection and exit'
+    )
+
+    parser.add_argument(
+        '--update-sheet',
+        action='store_true',
+        help='Fetch new ads and update Google Sheet with preview links'
+    )
+
+    parser.add_argument(
+        '--spreadsheet-id',
+        type=str,
+        help='Google Sheets spreadsheet ID (overrides SPREADSHEET_ID env var)'
+    )
+
+    parser.add_argument(
+        '--sheet-name',
+        type=str,
+        default=None,
+        help='Sheet tab name (default: Sheet1)'
+    )
+
+    parser.add_argument(
+        '--days',
+        type=int,
+        default=7,
+        help='Number of days to look back for new ads (default: 7)'
     )
 
     parser.add_argument(
@@ -95,9 +186,22 @@ def main():
         success = test_connection(config)
         sys.exit(0 if success else 1)
 
-    # Main automation logic would go here
+    # Update ad sheet if requested
+    if args.update_sheet:
+        spreadsheet_id = args.spreadsheet_id or config.spreadsheet_id
+        if not spreadsheet_id:
+            logger.error(
+                "Spreadsheet ID required. Use --spreadsheet-id or set SPREADSHEET_ID env var."
+            )
+            sys.exit(1)
+
+        sheet_name = args.sheet_name or config.sheet_name
+        success = update_ad_sheet(config, spreadsheet_id, sheet_name, args.days)
+        sys.exit(0 if success else 1)
+
+    # Default: show help
     logger.info("Exactius Ads Automation Platform")
-    logger.info("No automation workflows implemented yet.")
+    logger.info("Use --update-sheet to sync new ads to Google Sheets.")
     logger.info("Use --test-connection to verify API access.")
 
 

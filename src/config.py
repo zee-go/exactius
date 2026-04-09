@@ -40,6 +40,11 @@ class Config:
     api_version: str = 'v19.0'
     log_level: str = 'INFO'
 
+    # Google Sheets settings
+    spreadsheet_id: Optional[str] = None
+    sheet_name: str = 'Sheet1'
+    oauth_client_secrets_path: Optional[str] = None
+
     # Asset processing settings
     temp_download_dir: str = '/tmp/exactius-assets'
     max_image_size_mb: int = 30
@@ -64,6 +69,14 @@ class Config:
         # API settings
         self.api_version = os.getenv('FB_API_VERSION', 'v19.0')
         self.log_level = os.getenv('LOG_LEVEL', 'INFO')
+
+        # Google Sheets settings
+        self.spreadsheet_id = os.getenv('SPREADSHEET_ID', '1zZz1azGTfrWtuInoB39jiJBy9PDNGr7Ogr5GMCfsVmA')
+        self.sheet_name = os.getenv('SHEET_NAME', 'Sheet1')
+        self.oauth_client_secrets_path = os.getenv(
+            'GOOGLE_OAUTH_CLIENT_SECRETS',
+            str(Path.home() / '.exactius' / 'client_secret.json')
+        )
 
         # Asset processing settings
         self.temp_download_dir = os.getenv('TEMP_DOWNLOAD_DIR', '/tmp/exactius-assets')
