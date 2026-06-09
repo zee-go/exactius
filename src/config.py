@@ -40,6 +40,11 @@ class Config:
     api_version: str = 'v19.0'
     log_level: str = 'INFO'
 
+    # ClickUp integration
+    clickup_api_token: Optional[str] = None
+    clickup_webhook_secret: Optional[str] = None
+    clickup_trigger_status: str = 'ready for ads'
+
     # Asset processing settings
     temp_download_dir: str = '/tmp/exactius-assets'
     max_image_size_mb: int = 30
@@ -60,6 +65,11 @@ class Config:
         self.app_id = os.getenv('FB_APP_ID')
         self.app_secret = os.getenv('FB_APP_SECRET')
         self.ad_account_id = os.getenv('FB_AD_ACCOUNT_ID')
+
+        # ClickUp integration
+        self.clickup_api_token = os.getenv('CLICKUP_API_TOKEN')
+        self.clickup_webhook_secret = os.getenv('CLICKUP_WEBHOOK_SECRET')
+        self.clickup_trigger_status = os.getenv('CLICKUP_TRIGGER_STATUS', 'ready for ads').lower()
 
         # API settings
         self.api_version = os.getenv('FB_API_VERSION', 'v19.0')

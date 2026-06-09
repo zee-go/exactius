@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
-from src.api.routes import accounts, campaigns
+from src.api.routes import accounts, campaigns, clickup
 
 # Configure logging
 logging.basicConfig(
@@ -125,6 +125,7 @@ async def root():
 # Include routers
 app.include_router(accounts.router, prefix="/api")
 app.include_router(campaigns.router, prefix="/api")
+app.include_router(clickup.router, prefix="/api")
 
 
 if __name__ == "__main__":
