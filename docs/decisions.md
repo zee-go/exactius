@@ -4,6 +4,26 @@
 > future sessions don't re-litigate settled questions.
 > Append new entries at the top.
 
+## 2026-07-01 — ClickUp → Meta video sync via status-based webhook
+
+- **Decided**: Automate downloading video attachments from ClickUp and uploading
+  them to the Meta Ad Library using (1) direct ClickUp REST calls with a personal
+  API token — no ClickUp MCP dependency, and (2) the existing `facebook-business`
+  SDK / ad account token — no new Meta App or App Review. Trigger is a ClickUp
+  `taskStatusUpdated` webhook: when a task reaches the configured status
+  (`CLICKUP_TRIGGER_STATUS`, default "ready for ads"), its videos sync automatically.
+- **Why**: The user explicitly required a workaround that avoids MCP and a new Meta
+  App. Uploading to `/{ad-account-id}/advideos` only needs `ads_management`, which
+  the platform already has — no additional review needed. Status-based triggering
+  gives editors control over which videos reach Meta (only approved ones) and is
+  event-driven, avoiding polling lag.
+- **Notes**: ClickUp attachment URLs are pre-signed S3 links — they must be fetched
+  WITHOUT the ClickUp auth header (S3 rejects dual auth). Webhooks are HMAC-SHA256
+  verified via `CLICKUP_WEBHOOK_SECRET`. Auto-sync currently resolves Meta creds
+  from single-account config; multi-account list→account mapping is a follow-up.
+- **See**: `src/clickup/`, `src/orchestrator/clickup_sync.py`,
+  `src/api/routes/clickup.py`, `scripts/register_clickup_webhook.py`
+
 ## 2026-02-10 — Initial Architecture: Python + Facebook Business SDK
 
 - **Decided**: Use Python with the official facebook-business SDK for campaign

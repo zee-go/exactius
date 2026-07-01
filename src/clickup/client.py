@@ -143,7 +143,11 @@ class ClickUpClient:
         logger.info(f"Downloading attachment: {attachment.name} ({attachment.size} bytes)")
 
         try:
-            with self.session.get(attachment.url, stream=True, timeout=300) as resp:
+            # NOTE: attachment.url is a pre-signed S3 URL. It must be fetched
+            # WITHOUT the ClickUp Authorization header — S3 rejects requests
+            # that carry both a query-string signature and an Authorization
+            # header ("only one auth mechanism allowed"). Use a bare request.
+            with requests.get(attachment.url, stream=True, timeout=300) as resp:
                 resp.raise_for_status()
                 with open(dest, "wb") as fh:
                     for chunk in resp.iter_content(chunk_size=1024 * 1024):

@@ -8,6 +8,7 @@ configured trigger status (default: "ready for ads").
 
 import hashlib
 import hmac
+import json
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
@@ -78,20 +79,28 @@ async def clickup_webhook(
                 detail="Invalid webhook signature",
             )
 
-    payload = await request.json() if not raw_body else __import__("json").loads(raw_body)
+    try:
+        payload = json.loads(raw_body) if raw_body else {}
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid JSON body",
+        )
 
     event = payload.get("event", "")
     if event != "taskStatusUpdated":
         # Acknowledge non-actionable events immediately
         return {"received": True}
 
-    task_id = payload.get("task_id") or (payload.get("history_items", [{}])[0].get("task", {}) or {}).get("id")
-    new_status = (
-        payload.get("history_items", [{}])[0]
-        .get("after", {})
-        .get("status", "")
-        .lower()
+    # Find the status-change entry (don't assume it's the first history item)
+    history_items = payload.get("history_items", []) or []
+    status_item = next(
+        (item for item in history_items if item.get("field") == "status"),
+        {},
     )
+
+    task_id = payload.get("task_id") or (status_item.get("task", {}) or {}).get("id")
+    new_status = (status_item.get("after", {}) or {}).get("status", "").lower()
 
     if not task_id:
         logger.warning("Webhook payload missing task_id")
