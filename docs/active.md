@@ -22,7 +22,12 @@
 
 ## Pending Review
 
-_(Nothing pending review yet)_
+- **[2026-07-08] ClickUp → Meta video sync** — Built the full pipeline (client,
+  parser, credential resolver, sync worker, webhook + manual routes, registration
+  script, 18 passing tests). Single- and multi-account modes supported. Next: deploy,
+  register the webhook (`scripts/register_clickup_webhook.py`), set `CLICKUP_*` env /
+  secrets, and run one real end-to-end task through "Ready for Ads". For multi-account,
+  populate the `exactius-shared-clickup-account-map` secret.
 
 ## Scheduled Checks
 

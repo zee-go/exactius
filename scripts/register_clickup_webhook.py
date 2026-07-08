@@ -4,7 +4,8 @@ One-time script to register the ClickUp webhook for taskStatusUpdated events.
 Usage:
     CLICKUP_API_TOKEN=pk_... python scripts/register_clickup_webhook.py \
         --team-id <your-team-id> \
-        --endpoint https://your-server.com/api/clickup/webhook
+        --endpoint https://your-server.com/api/clickup/webhook \
+        --secret <shared-webhook-secret>
 
 Find your team ID at: https://app.clickup.com/<team-id>/
 """
@@ -24,12 +25,12 @@ def main():
     parser.add_argument(
         "--endpoint",
         required=True,
-        help="Public URL of your webhook endpoint, e.g. https://yourserver.com/api/clickup/webhook",
+        help="Public webhook URL, e.g. https://yourserver.com/api/clickup/webhook",
     )
     parser.add_argument(
         "--secret",
         default=os.getenv("CLICKUP_WEBHOOK_SECRET", ""),
-        help="Shared secret for HMAC signature verification (optional but recommended)",
+        help="Shared secret for HMAC signature verification (recommended)",
     )
     args = parser.parse_args()
 
@@ -57,12 +58,12 @@ def main():
 
     data = resp.json()
     webhook_id = data.get("id") or data.get("webhook", {}).get("id")
-    print(f"Webhook registered successfully!")
+    print("Webhook registered successfully!")
     print(f"  Webhook ID : {webhook_id}")
     print(f"  Endpoint   : {args.endpoint}")
     print(f"  Events     : taskStatusUpdated")
     print()
-    print("Store the webhook ID if you ever need to delete it:")
+    print("To delete later:")
     print(f"  DELETE https://api.clickup.com/api/v2/webhook/{webhook_id}")
 
 

@@ -1,22 +1,24 @@
 """
 ClickUp webhook and manual sync routes.
 
-Handles incoming ClickUp webhooks (taskStatusUpdated) and triggers
-the ClickUp → Meta video sync workflow when a task reaches the
-configured trigger status (default: "ready for ads").
+Handles incoming ClickUp webhooks (taskStatusUpdated) and triggers the
+ClickUp → Meta video sync when a task reaches the configured trigger status
+(default: "ready for ads"). Works in both single-account (.env) and
+multi-account (Secret Manager) modes.
 """
 
 import hashlib
 import hmac
 import json
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
 from pydantic import BaseModel
-from typing import Optional
 
 from src.config import get_config
-from src.orchestrator.clickup_sync import sync_task_videos_to_meta
+from src.clickup.resolver import MetaCredentials
+from src.orchestrator.clickup_sync import sync_task_auto, sync_task_videos_to_meta
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,8 @@ class ManualSyncRequest(BaseModel):
     task_id: str
     ad_account_id: str
     access_token: str
+    app_id: Optional[str] = None
+    app_secret: Optional[str] = None
 
 
 class SyncResult(BaseModel):
@@ -52,16 +56,16 @@ async def clickup_webhook(
     """
     Receive ClickUp webhook events.
 
-    ClickUp sends taskStatusUpdated events signed with HMAC-SHA256.
-    When a task reaches the configured trigger status, video attachments
-    are downloaded from ClickUp and uploaded to Meta AdVideos in the background.
+    ClickUp sends taskStatusUpdated events signed with HMAC-SHA256. When a task
+    reaches the configured trigger status, its video attachments are downloaded
+    and uploaded to Meta AdVideos in the background (fast 200 back to ClickUp).
 
-    Register this endpoint URL in ClickUp via scripts/register_clickup_webhook.py.
+    Register this endpoint via scripts/register_clickup_webhook.py.
     """
     config = get_config()
     raw_body = await request.body()
 
-    # Verify signature if a webhook secret is configured
+    # Verify signature if a webhook secret is configured.
     if config.clickup_webhook_secret:
         if not x_signature:
             raise HTTPException(
@@ -89,10 +93,10 @@ async def clickup_webhook(
 
     event = payload.get("event", "")
     if event != "taskStatusUpdated":
-        # Acknowledge non-actionable events immediately
+        # Acknowledge non-actionable events immediately.
         return {"received": True}
 
-    # Find the status-change entry (don't assume it's the first history item)
+    # Find the status-change entry (don't assume it's the first history item).
     history_items = payload.get("history_items", []) or []
     status_item = next(
         (item for item in history_items if item.get("field") == "status"),
@@ -110,29 +114,15 @@ async def clickup_webhook(
         logger.debug(f"Task {task_id} moved to '{new_status}' — not trigger status, ignoring")
         return {"received": True}
 
-    logger.info(
-        f"Task {task_id} reached '{new_status}' — queuing video sync"
-    )
+    logger.info(f"Task {task_id} reached '{new_status}' — queuing video sync")
 
-    # Resolve account: for now use the default single-account config.
-    # In multi-account mode the account mapping should be stored per workspace/list
-    # in Secret Manager and looked up here.
-    ad_account_id = config.ad_account_id
-    access_token = config.access_token
+    # Build an account manager only in multi-account mode (needs a GCP project).
+    account_manager = None
+    if config.is_multi_account_mode():
+        from src.api.dependencies import get_account_manager
+        account_manager = get_account_manager()
 
-    if not ad_account_id or not access_token:
-        logger.error(
-            "Cannot sync: FB_AD_ACCOUNT_ID / FB_ACCESS_TOKEN not configured. "
-            "Use the manual sync endpoint with explicit credentials."
-        )
-        return {"received": True, "warning": "Meta credentials not configured for auto-sync"}
-
-    background_tasks.add_task(
-        _run_sync,
-        task_id=task_id,
-        ad_account_id=ad_account_id,
-        access_token=access_token,
-    )
+    background_tasks.add_task(_run_sync, task_id=task_id, account_manager=account_manager)
 
     return {"received": True, "task_id": task_id, "sync": "queued"}
 
@@ -144,15 +134,20 @@ async def clickup_webhook(
 @router.post("/sync-videos", response_model=SyncResult)
 async def manual_sync_videos(body: ManualSyncRequest):
     """
-    Manually trigger video sync for a specific ClickUp task.
+    Manually trigger video sync for a specific ClickUp task with explicit
+    Meta credentials. Useful for testing or one-off syncs.
 
-    Useful for testing or one-off syncs without waiting for a webhook.
+    app_id / app_secret fall back to the local config if omitted.
     """
-    results = sync_task_videos_to_meta(
-        task_id=body.task_id,
+    config = get_config()
+    creds = MetaCredentials(
         ad_account_id=body.ad_account_id,
         access_token=body.access_token,
+        app_id=body.app_id or config.app_id or "",
+        app_secret=body.app_secret or config.app_secret or "",
     )
+
+    results = sync_task_videos_to_meta(body.task_id, creds)
 
     return SyncResult(
         task_id=body.task_id,
@@ -165,10 +160,10 @@ async def manual_sync_videos(body: ManualSyncRequest):
 # Internal helper
 # ------------------------------------------------------------------
 
-def _run_sync(task_id: str, ad_account_id: str, access_token: str) -> None:
+def _run_sync(task_id: str, account_manager=None) -> None:
     """Background task wrapper with top-level error catching."""
     try:
-        results = sync_task_videos_to_meta(task_id, ad_account_id, access_token)
+        results = sync_task_auto(task_id, account_manager=account_manager)
         logger.info(
             f"Background sync finished for task {task_id}: "
             f"{len(results)} video(s) uploaded"

@@ -36,14 +36,14 @@ class Config:
     app_secret: Optional[str] = None
     ad_account_id: Optional[str] = None
 
-    # API settings
-    api_version: str = 'v19.0'
-    log_level: str = 'INFO'
-
     # ClickUp integration
     clickup_api_token: Optional[str] = None
     clickup_webhook_secret: Optional[str] = None
     clickup_trigger_status: str = 'ready for ads'
+
+    # API settings
+    api_version: str = 'v19.0'
+    log_level: str = 'INFO'
 
     # Asset processing settings
     temp_download_dir: str = '/tmp/exactius-assets'

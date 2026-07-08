@@ -19,16 +19,17 @@ SECRET = "test-secret"
 
 @pytest.fixture(autouse=True)
 def configure(monkeypatch):
-    """Force a known config for each test."""
-    # Ensure config validates in a clean test env (multi-account mode only
-    # needs GOOGLE_CLOUD_PROJECT). Rebuild the singleton so it picks this up.
-    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
+    """Force a known single-account config for each test (no GCP needed)."""
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.setenv("FB_ACCESS_TOKEN", "tok")
+    monkeypatch.setenv("FB_APP_ID", "aid")
+    monkeypatch.setenv("FB_APP_SECRET", "asec")
+    monkeypatch.setenv("FB_AD_ACCOUNT_ID", "act_123")
     monkeypatch.setattr(config_module, "_config_instance", None)
+
     cfg = get_config()
     monkeypatch.setattr(cfg, "clickup_webhook_secret", SECRET)
     monkeypatch.setattr(cfg, "clickup_trigger_status", "ready for ads")
-    monkeypatch.setattr(cfg, "ad_account_id", "act_123")
-    monkeypatch.setattr(cfg, "access_token", "token")
     yield
 
 
@@ -64,11 +65,11 @@ def test_rejects_bad_signature():
 def test_triggers_sync_on_matching_status(monkeypatch):
     called = {}
 
-    def fake_sync(task_id, ad_account_id, access_token):
+    def fake_sync(task_id, account_manager=None):
         called["task_id"] = task_id
         return [{"name": "v.mp4", "meta_video_id": "999"}]
 
-    monkeypatch.setattr(clickup_route, "sync_task_videos_to_meta", fake_sync)
+    monkeypatch.setattr(clickup_route, "sync_task_auto", fake_sync)
 
     body = json.dumps(_payload("ready for ads")).encode()
     resp = client.post(
@@ -78,7 +79,7 @@ def test_triggers_sync_on_matching_status(monkeypatch):
     )
     assert resp.status_code == 200
     assert resp.json().get("sync") == "queued"
-    # BackgroundTasks run after response in TestClient
+    # BackgroundTasks run after the response in TestClient.
     assert called.get("task_id") == "task123"
 
 
@@ -86,7 +87,7 @@ def test_ignores_non_trigger_status(monkeypatch):
     called = {}
     monkeypatch.setattr(
         clickup_route,
-        "sync_task_videos_to_meta",
+        "sync_task_auto",
         lambda *a, **k: called.setdefault("ran", True),
     )
     body = json.dumps(_payload("in progress")).encode()

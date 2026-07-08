@@ -4,7 +4,7 @@
 > future sessions don't re-litigate settled questions.
 > Append new entries at the top.
 
-## 2026-07-01 — ClickUp → Meta video sync via status-based webhook
+## 2026-07-08 — ClickUp → Meta video sync via status-based webhook
 
 - **Decided**: Automate downloading video attachments from ClickUp and uploading
   them to the Meta Ad Library using (1) direct ClickUp REST calls with a personal
@@ -14,15 +14,21 @@
   (`CLICKUP_TRIGGER_STATUS`, default "ready for ads"), its videos sync automatically.
 - **Why**: The user explicitly required a workaround that avoids MCP and a new Meta
   App. Uploading to `/{ad-account-id}/advideos` only needs `ads_management`, which
-  the platform already has — no additional review needed. Status-based triggering
-  gives editors control over which videos reach Meta (only approved ones) and is
-  event-driven, avoiding polling lag.
-- **Notes**: ClickUp attachment URLs are pre-signed S3 links — they must be fetched
-  WITHOUT the ClickUp auth header (S3 rejects dual auth). Webhooks are HMAC-SHA256
-  verified via `CLICKUP_WEBHOOK_SECRET`. Auto-sync currently resolves Meta creds
-  from single-account config; multi-account list→account mapping is a follow-up.
-- **See**: `src/clickup/`, `src/orchestrator/clickup_sync.py`,
-  `src/api/routes/clickup.py`, `scripts/register_clickup_webhook.py`
+  the platform already has. Status-based triggering gives editors control over which
+  videos reach Meta (only approved ones) and is event-driven, avoiding polling lag.
+- **Multi-account**: A shared Secret Manager secret
+  `exactius-shared-clickup-account-map` (JSON `{clickup_list_id: account_id_or_name}`)
+  maps each ClickUp list to a Meta account; the webhook reads the task's list ID and
+  resolves credentials through `AccountManager`. The ClickUp token in multi-account
+  mode comes from `exactius-shared-clickup-api-token`. Single-account mode reads
+  everything from `.env`.
+- **Notes**: ClickUp attachment URLs are pre-signed S3 links — fetched WITHOUT the
+  ClickUp auth header (S3 rejects dual auth). `FacebookAdsApi.init()` must be called
+  before uploading (CreativeManager does not self-init — mirrors CampaignLauncher).
+  Webhooks are HMAC-SHA256 verified via `CLICKUP_WEBHOOK_SECRET`.
+- **See**: `src/clickup/` (client, parser, resolver),
+  `src/orchestrator/clickup_sync.py`, `src/api/routes/clickup.py`,
+  `scripts/register_clickup_webhook.py`, `tests/test_clickup_*.py`
 
 ## 2026-02-10 — Initial Architecture: Python + Facebook Business SDK
 

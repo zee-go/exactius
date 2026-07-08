@@ -198,6 +198,45 @@ class SecretManagerClient:
             logger.error(f"Failed to list accounts: {str(e)}")
             raise
 
+    def get_clickup_token(self) -> Optional[str]:
+        """
+        Fetch the shared ClickUp API token, if configured.
+
+        Returns:
+            ClickUp personal API token, or None if the secret is not set.
+        """
+        try:
+            return self._get_secret('exactius-shared-clickup-api-token')
+        except ValueError:
+            logger.debug("Shared ClickUp API token secret not configured")
+            return None
+
+    def get_clickup_account_map(self) -> Dict[str, str]:
+        """
+        Fetch the ClickUp list -> Meta account mapping, if configured.
+
+        The secret 'exactius-shared-clickup-account-map' holds a JSON object
+        mapping ClickUp list IDs to Meta account identifiers (account ID or
+        short name), e.g. {"901100011": "nike"}.
+
+        Returns:
+            Mapping dict (empty if the secret is not set or invalid).
+        """
+        try:
+            raw = self._get_secret('exactius-shared-clickup-account-map')
+        except ValueError:
+            logger.debug("ClickUp account map secret not configured")
+            return {}
+
+        try:
+            mapping = json.loads(raw)
+            if not isinstance(mapping, dict):
+                raise ValueError("account map must be a JSON object")
+            return {str(k): str(v) for k, v in mapping.items()}
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(f"Invalid ClickUp account map JSON: {e}")
+            return {}
+
     def _get_secret(self, secret_id: str) -> str:
         """
         Internal helper to fetch a secret value.
