@@ -5,18 +5,15 @@ Maps an incoming ClickUp task to the correct Meta ad account credentials,
 supporting both single-account (local .env) and multi-account (Secret Manager)
 modes.
 
-Multi-account mapping:
-    A shared Secret Manager secret `exactius-shared-clickup-account-map`
-    holds a JSON object mapping ClickUp list IDs to Meta account identifiers
-    (either an account ID "act_123" or a short name "nike"), e.g.:
+Account selection (multi-account):
+    Each ClickUp task carries a custom dropdown field (default name
+    "Meta Ad Account", configurable via CLICKUP_ACCOUNT_FIELD). The editor
+    picks the target account per task; the option label is the Meta account
+    identifier — a short name ("nike") or ad account ID ("act_123456789") —
+    which is resolved through AccountManager.
 
-        {
-          "901100011": "nike",
-          "901100022": "act_123456789"
-        }
-
-    When a webhook fires, the task's list ID is looked up here to decide
-    which account's videos it belongs to.
+    If no account is selected, NoAccountSelectedError is raised so the caller
+    can skip the task and log a warning (nothing is uploaded to a wrong account).
 """
 
 import logging
@@ -24,8 +21,13 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from src.config import Config
+from src.clickup.parser import extract_selected_account
 
 logger = logging.getLogger(__name__)
+
+
+class NoAccountSelectedError(Exception):
+    """Raised when a task has no Meta ad account selected in its custom field."""
 
 
 @dataclass
@@ -68,10 +70,14 @@ def resolve_meta_credentials(
     account_manager: Optional[Any] = None,
 ) -> MetaCredentials:
     """
-    Resolve Meta credentials for the account a ClickUp task belongs to.
+    Resolve Meta credentials for the account selected on a ClickUp task.
+
+    In multi-account mode the account is read from the task's "Meta Ad Account"
+    custom field. In single-account mode the local .env account is used and the
+    field is ignored (there is only one account).
 
     Args:
-        task: Task dict from ClickUpClient.get_task() (must include `list.id`
+        task: Task dict from ClickUpClient.get_task() (must include custom_fields
             for multi-account resolution).
         config: Application config (determines mode).
         account_manager: AccountManager instance (required in multi-account mode).
@@ -80,28 +86,28 @@ def resolve_meta_credentials(
         MetaCredentials for the resolved account.
 
     Raises:
-        ValueError: If the account can't be resolved or credentials are missing.
+        NoAccountSelectedError: If the task has no account chosen (multi-account).
+        ValueError: If the selected account can't be loaded or config is missing.
     """
     # Multi-account mode takes precedence when a GCP project is configured.
     if config.is_multi_account_mode():
         if account_manager is None:
             raise ValueError("account_manager is required in multi-account mode")
 
-        list_id = str((task.get("list") or {}).get("id") or "")
-        if not list_id:
-            raise ValueError(
-                f"Task {task.get('id')} has no list ID — cannot map to an account"
-            )
-
-        account_map = account_manager.secret_manager.get_clickup_account_map()
-        identifier = account_map.get(list_id)
+        identifier = extract_selected_account(task, config.clickup_account_field)
         if not identifier:
-            raise ValueError(
-                f"No account mapping for ClickUp list '{list_id}'. Add it to the "
-                f"'exactius-shared-clickup-account-map' secret."
+            raise NoAccountSelectedError(
+                f"Task {task.get('id')} has no '{config.clickup_account_field}' "
+                f"selected — skipping."
             )
 
-        account_data = account_manager.get_account(identifier)
+        try:
+            account_data = account_manager.get_account(identifier)
+        except Exception as e:
+            raise ValueError(
+                f"Selected account '{identifier}' could not be loaded: {e}"
+            )
+
         shared = account_data["shared"]
         return MetaCredentials(
             ad_account_id=account_data["account_id"],

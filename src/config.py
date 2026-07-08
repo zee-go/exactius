@@ -40,6 +40,7 @@ class Config:
     clickup_api_token: Optional[str] = None
     clickup_webhook_secret: Optional[str] = None
     clickup_trigger_status: str = 'ready for ads'
+    clickup_account_field: str = 'Meta Ad Account'
 
     # API settings
     api_version: str = 'v19.0'
@@ -70,6 +71,7 @@ class Config:
         self.clickup_api_token = os.getenv('CLICKUP_API_TOKEN')
         self.clickup_webhook_secret = os.getenv('CLICKUP_WEBHOOK_SECRET')
         self.clickup_trigger_status = os.getenv('CLICKUP_TRIGGER_STATUS', 'ready for ads').lower()
+        self.clickup_account_field = os.getenv('CLICKUP_ACCOUNT_FIELD', 'Meta Ad Account')
 
         # API settings
         self.api_version = os.getenv('FB_API_VERSION', 'v19.0')

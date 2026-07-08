@@ -16,12 +16,17 @@
   App. Uploading to `/{ad-account-id}/advideos` only needs `ads_management`, which
   the platform already has. Status-based triggering gives editors control over which
   videos reach Meta (only approved ones) and is event-driven, avoiding polling lag.
-- **Multi-account**: A shared Secret Manager secret
-  `exactius-shared-clickup-account-map` (JSON `{clickup_list_id: account_id_or_name}`)
-  maps each ClickUp list to a Meta account; the webhook reads the task's list ID and
-  resolves credentials through `AccountManager`. The ClickUp token in multi-account
-  mode comes from `exactius-shared-clickup-api-token`. Single-account mode reads
-  everything from `.env`.
+- **Account selection (multi-account)**: The target Meta ad account is chosen
+  **per task** via a ClickUp custom dropdown field named "Meta Ad Account"
+  (configurable via `CLICKUP_ACCOUNT_FIELD`). The selected option's label is the
+  account short name ("nike") or ad account ID ("act_123"), resolved through
+  `AccountManager`. If no account is selected, the task is **skipped with a warning**
+  (`NoAccountSelectedError`) — nothing is uploaded to a wrong account. This replaced
+  the earlier list→account map so editors can target different accounts from the same
+  list. The ClickUp token in multi-account mode comes from
+  `exactius-shared-clickup-api-token`. Single-account mode reads everything from
+  `.env` and ignores the field (one account only).
+  Use `scripts/list_clickup_fields.py` to verify the field/options are set up.
 - **Notes**: ClickUp attachment URLs are pre-signed S3 links — fetched WITHOUT the
   ClickUp auth header (S3 rejects dual auth). `FacebookAdsApi.init()` must be called
   before uploading (CreativeManager does not self-init — mirrors CampaignLauncher).

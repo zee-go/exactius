@@ -4,6 +4,7 @@ import pytest
 
 from src.clickup.resolver import (
     MetaCredentials,
+    NoAccountSelectedError,
     resolve_clickup_token,
     resolve_meta_credentials,
 )
@@ -19,21 +20,18 @@ class FakeConfig:
         self.app_id = kw.get("app_id")
         self.app_secret = kw.get("app_secret")
         self.clickup_api_token = kw.get("clickup_api_token")
+        self.clickup_account_field = kw.get("clickup_account_field", "Meta Ad Account")
 
     def is_multi_account_mode(self):
         return self._multi
 
 
 class FakeSecretManager:
-    def __init__(self, token=None, account_map=None):
+    def __init__(self, token=None):
         self._token = token
-        self._map = account_map or {}
 
     def get_clickup_token(self):
         return self._token
-
-    def get_clickup_account_map(self):
-        return self._map
 
 
 class FakeAccountManager:
@@ -43,6 +41,26 @@ class FakeAccountManager:
 
     def get_account(self, identifier):
         return self._accounts[identifier]
+
+
+def _task_with_account(option_name, *, value=0):
+    """Build a task whose 'Meta Ad Account' dropdown selects `option_name`."""
+    return {
+        "id": "t1",
+        "custom_fields": [
+            {
+                "name": "Meta Ad Account",
+                "type": "drop_down",
+                "value": value,
+                "type_config": {
+                    "options": [
+                        {"id": "opt-0", "name": option_name, "orderindex": 0},
+                        {"id": "opt-1", "name": "other", "orderindex": 1},
+                    ]
+                },
+            }
+        ],
+    }
 
 
 # ------------------------------------------------------------------
@@ -67,7 +85,7 @@ def test_clickup_token_missing_raises():
 
 
 # ------------------------------------------------------------------
-# Meta credential resolution
+# Meta credential resolution — single account
 # ------------------------------------------------------------------
 
 def test_single_account_uses_config():
@@ -88,11 +106,13 @@ def test_single_account_missing_creds_raises():
         resolve_meta_credentials({"id": "t1"}, cfg)
 
 
-def test_multi_account_maps_list_to_account():
-    cfg = FakeConfig(multi=True)
-    sm = FakeSecretManager(account_map={"list1": "nike"})
-    am = FakeAccountManager(
-        sm,
+# ------------------------------------------------------------------
+# Meta credential resolution — multi account (custom field)
+# ------------------------------------------------------------------
+
+def _account_manager():
+    return FakeAccountManager(
+        FakeSecretManager(),
         accounts={
             "nike": {
                 "account_id": "act_999",
@@ -101,21 +121,44 @@ def test_multi_account_maps_list_to_account():
             }
         },
     )
-    task = {"id": "t1", "list": {"id": "list1"}}
-    creds = resolve_meta_credentials(task, cfg, am)
+
+
+def test_multi_account_reads_custom_field_by_orderindex():
+    cfg = FakeConfig(multi=True)
+    creds = resolve_meta_credentials(_task_with_account("nike", value=0), cfg, _account_manager())
     assert creds == MetaCredentials("act_999", "tok999", "sid", "ssec")
 
 
-def test_multi_account_unmapped_list_raises():
+def test_multi_account_reads_custom_field_by_option_id():
     cfg = FakeConfig(multi=True)
-    sm = FakeSecretManager(account_map={"other": "nike"})
-    am = FakeAccountManager(sm, accounts={})
-    task = {"id": "t1", "list": {"id": "list1"}}
-    with pytest.raises(ValueError, match="No account mapping"):
-        resolve_meta_credentials(task, cfg, am)
+    creds = resolve_meta_credentials(_task_with_account("nike", value="opt-0"), cfg, _account_manager())
+    assert creds == MetaCredentials("act_999", "tok999", "sid", "ssec")
+
+
+def test_multi_account_no_selection_raises_no_account():
+    cfg = FakeConfig(multi=True)
+    task = {"id": "t1", "custom_fields": [
+        {"name": "Meta Ad Account", "type": "drop_down", "value": None,
+         "type_config": {"options": []}}
+    ]}
+    with pytest.raises(NoAccountSelectedError):
+        resolve_meta_credentials(task, cfg, _account_manager())
+
+
+def test_multi_account_missing_field_raises_no_account():
+    cfg = FakeConfig(multi=True)
+    with pytest.raises(NoAccountSelectedError):
+        resolve_meta_credentials({"id": "t1", "custom_fields": []}, cfg, _account_manager())
+
+
+def test_multi_account_unknown_account_raises_value_error():
+    cfg = FakeConfig(multi=True)
+    task = _task_with_account("ghost", value=0)  # option label not in account manager
+    with pytest.raises(ValueError, match="could not be loaded"):
+        resolve_meta_credentials(task, cfg, _account_manager())
 
 
 def test_multi_account_requires_account_manager():
     cfg = FakeConfig(multi=True)
     with pytest.raises(ValueError, match="account_manager is required"):
-        resolve_meta_credentials({"id": "t1", "list": {"id": "x"}}, cfg, None)
+        resolve_meta_credentials(_task_with_account("nike"), cfg, None)

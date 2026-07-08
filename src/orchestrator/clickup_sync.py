@@ -20,6 +20,7 @@ from src.clickup.client import ClickUpClient
 from src.clickup.parser import extract_video_attachments
 from src.clickup.resolver import (
     MetaCredentials,
+    NoAccountSelectedError,
     resolve_clickup_token,
     resolve_meta_credentials,
 )
@@ -125,10 +126,14 @@ def sync_task_auto(
     secret_manager = getattr(account_manager, "secret_manager", None)
     clickup_client = ClickUpClient(resolve_clickup_token(config, secret_manager))
 
-    # Fetch once — we need the list ID (for account mapping) and attachments.
+    # Fetch once — we need the custom field (for account selection) and attachments.
     task = clickup_client.get_task(task_id)
 
-    creds = resolve_meta_credentials(task, config, account_manager)
+    try:
+        creds = resolve_meta_credentials(task, config, account_manager)
+    except NoAccountSelectedError as e:
+        logger.warning(f"Skipping task {task_id}: {e}")
+        return []
 
     return sync_task_videos_to_meta(
         task_id,
